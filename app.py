@@ -78,6 +78,10 @@ with col2:
 
 with col3:
   title = st.text_input('Precio', format_precio(productos[producto]), disabled=True)
+with col4:
+    vendedor = st.selectbox('Selecciona un vendedor', ['VENDEDOR 1', 'VENDEDOR 2', 'VENDEDOR 3'])
+
+
 
 
 
