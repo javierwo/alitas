@@ -7,6 +7,7 @@ import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
 import yaml
 import plotly.express as px
+import datetime
 
 
 # LOGIN CONFIGURATION
@@ -81,6 +82,38 @@ def cargar_datos(id_usuario, engine):
   WHERE v.id_usuario_fk = {id_usuario}
   """
   return pd.read_sql(query, engine)
+
+
+def cargar_ventas(id_usuario_fk, engine):
+  if 'ventas_usuario' in st.session_state:
+    ventas_usuario = st.session_state['ventas_usuario']
+  else:
+    with engine.connect() as dbConnection:
+      ventas_usuario = pd.read_sql(
+        "SELECT * FROM ventas where id_usuario_fk = %s",
+        dbConnection,
+        params=(id_usuario_fk,)
+      )
+    ventas_usuario['valor_pagado'] = ventas_usuario['valor_pagado'].apply(format_precio)
+    ventas_usuario['total'] = ventas_usuario['total'].apply(format_precio)
+    ventas_usuario['cambio'] = ventas_usuario['cambio'].apply(format_precio)
+
+    ventas_usuario.rename(columns = {
+      'id_venta':'Venta',
+      'num_productos':'Número de Productos',
+      'total':'Total',
+      'valor_pagado':'Valor Cancelado',
+      'cambio':'Cambio',
+      'fecha_creacion':'Fecha de Creación',
+    }, inplace = True)
+    del ventas_usuario['id_usuario_fk']
+
+
+
+    st.session_state['ventas_usuario'] = ventas_usuario
+
+
+  return ventas_usuario
 
 
 # MAIN FUNCTION
@@ -387,42 +420,90 @@ def main():
         if st.button("NUEVO PEDIDO", type='primary'):
           streamlit_js_eval(js_expressions="parent.window.location.reload()")
 
-      with tab2:
-    
-        # Sidebar para filtros
-        st.sidebar.header("Filtros")
 
-        # Cargar datos
-        datos = cargar_datos(1, alchemyEngine)
+    with tab2:
+  
+      # Cargar datos
+      datos = cargar_datos( id_usuario_fk, alchemyEngine)
+      #datos['fecha_creacion'] = datos['fecha_creacion'].dt.date
 
-        st.write(datos)
-        st.write(datos['fecha_creacion'].dt.date)
-        st.write(datos.groupby(datos['fecha_creacion'].dt.date)['total'].sum())
+      # Procesar datos para el gráfico
+      ventas_diarias = datos.groupby(datos['fecha_creacion'].dt.date).agg({'total': 'sum'}).reset_index().head()
+      ventas_diarias['total_formato_moneda'] = ['$' + '{:,.2f}'.format(x) for x in ventas_diarias['total']]  # Formatear como moneda
 
-        # Dashboard
-        st.title("Dashboard de Ventas")
+      # Crear el gráfico de barras
+      fig_ventas_diarias = px.bar(
+        ventas_diarias,
+        x='fecha_creacion',
+        y='total',
+        text='total_formato_moneda',
+        labels={'x': 'Fecha', 'total': 'Total de Ventas'}
+      )
 
-        # Métricas
-        ventas_diarias = datos.groupby(datos['fecha_creacion'].dt.date)['total'].sum()
-        st.write(ventas_diarias)
-        st.header("Ventas Diarias")
-        st.bar_chart(ventas_diarias['total'])
+      fig_ventas_diarias.update_xaxes(
+        dtick="1D",
+        tickformat="%x"
+        )
+
+      fig_ventas_diarias.update_traces(texttemplate='%{text}', textposition='outside')
+      fig_ventas_diarias.update_layout(uniformtext_minsize=13, uniformtext_mode='hide')
+
+      fig_ventas_diarias.update_layout(
+        xaxis_title="Fecha",  # Cambiar el nombre del eje X
+        hovermode=False  # Desactivar el hover
+      )
+
+      # Mostrar el gráfico en Streamlit
 
 
 
+      # Procesar datos para ventas mensuales
+      ventas_mensuales = datos.groupby(datos['fecha_creacion'].dt.to_period('M')).agg({'total': 'sum'})
+
+      # Convertir el índice PeriodIndex a DateTimeIndex para Plotly
+      ventas_mensuales.index = ventas_mensuales.index.to_timestamp()
+
+      # Formatear las fechas y los valores de las ventas para el gráfico
+      ventas_mensuales.index = ventas_mensuales.index.strftime('%Y-%m')  # Formatear solo con año y mes
+      ventas_mensuales['total_formato_moneda'] = ['$' + '{:,.2f}'.format(x) for x in ventas_mensuales['total']]  # Formatear como moneda
+
+      # Crear el gráfico de barras para ventas mensuales
+      fig_ventas_mensuales = px.bar(
+          ventas_mensuales,
+          x=ventas_mensuales.index,
+          y='total',
+          text='total_formato_moneda',
+          labels={'x': 'Mes de Venta', 'total': 'Total de Ventas'}
+      )
+
+      fig_ventas_mensuales.update_xaxes(
+      dtick="M1",
+      tickformat="%b\n%Y")
+
+      # Actualizar el gráfico con las modificaciones
+      fig_ventas_mensuales.update_traces(texttemplate='%{text}', textposition='outside', width=0.5)  # Ajustar el ancho de las barras
+      fig_ventas_mensuales.update_layout(
+          xaxis_title="Mes",
+          hovermode=False  # Desactivar el hover
+      )
 
 
-        # Gráfico de Ventas Semanales
-        st.header("Ventas Semanales")
-        ventas_semanales = datos.resample('W', on='fecha_creacion').sum()
-        st.line_chart(ventas_semanales['total'])
 
-        # Tabla de Datos
-        st.header("Detalle de Ventas")
-        st.dataframe(datos)
+      col1_plot, col2_plot = st.columns(2)
+
+      with col1_plot:
+        st.subheader("Ventas Diarias")
+        st.plotly_chart(fig_ventas_diarias, theme="streamlit", use_container_width=True)
+
+      with col2_plot:
+        st.subheader("Ventas Mensuales")
+        st.plotly_chart(fig_ventas_mensuales, theme="streamlit", use_container_width=True)
 
 
-        
+      ventas_usuario = cargar_ventas(id_usuario_fk, alchemyEngine)
+
+      st.subheader("Ventas")
+      st.dataframe(ventas_usuario, use_container_width=True, hide_index=True)
 
 # MAIN STATEMENT
 if __name__ == '__main__':
