@@ -1,0 +1,22 @@
+credentials:
+  usernames:
+    ximena:
+      name: Ximena Garcia
+      password: "$2b$12$DlbKLTmg20SsnKcHSUd2gOQSRK3r3iU6ohbIDx4geUG7UfptZoxam"
+
+    asinche:
+      name: Alexandra Sinche
+      password: "$2b$12$QkijiRDBa2dDbmHxp0lZ3uFLPBY0QokmCm6MKgGTIh6uIRdxjcS7e"
+
+    sanchezd:
+      name: Deisy Sanchez
+      password: "$2b$12$IKhW7nbBzeb9B.OrNilm2.imlhZRX3p8EoFlmh3NMXU.ExsAh9.se"
+
+    tenecorat:
+      name: Tatiana Tenecora
+      password: "$2b$12$x7WezgXA7VJeoAOPa0VquuW5Rt7OqBmrQDsvFzCFE2OZnH0jksqx2"
+
+cookie:
+  expiry_days: 10
+  key: some_signature_key
+  name: streamlit_auth

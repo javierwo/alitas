@@ -1,158 +1,429 @@
-
 import streamlit as st
 import pandas as pd
-
-# Lista de productos con sus precios
-productos = {
-"SOLANO 2 ALITAS + PAPAS": 2.00,
-    "TU Y YO 4 ALITAS + PAPAS": 3.75,
-    "GOLOSO  6 ALITAS + PAPAS Y JUGO COCO": 5.50,
-    "JORGA 9 ALITAS + PAPAS Y COLA 1LT": 7.50,
-    "FIESTERO 13 ALITAS + PAPAS + COLA 1LT": 11.00,
-    "ALITAS X UNIDAD": 0.70,
-    "PAPI POLLO  1 PRESA + PAPAS": 2.25,
-    "PRESAS X UNIDAD": 1.50,
-    "DEDOS DE PECHUGA (4 tiras de pechuga)": 3.50,
-    "ARROZ MIX": 1.50,
-    "ARROZ CON POLLO": 2.75,
-    "Mr. BROASTER  3 PRESAS  + PAPAS": 6.50,
-    "PORC PAPAS": 1.00,
-    "SALCHI pequeña": 1.25,
-    "SALCHI grande": 1.50,
-    "SALCHI MIX  400cc": 1.80,
-    "MR. PAPA STRIPS": 1.75,
-    "CHORIPAPA 400cc": 2.00,
-    "HAMB POLLO": 1.50,
-    "CHESS BURGER": 1.75,
-    "MR. BURGER": 2.50,
-    "CHORIPAN peq": 1.50,
-    "CHORIPAN gr": 2.50,
-    "PERNIL + VASO JUGO": 2.00,
-    "CUBANO": 1.50,
-    "HOT DOG ": 1.25,
-    "HOT DOG JUMBO": 2.00,
-    "NACHOS CON QUESO": 2.00,
-    "EMPANADA POLLO": 1.50,
-    "CAFÉ": 0.75,
-    "JUGO DE COCO": 0.75,
-    "JUGO DE JAMAICA": 0.50,
-    "COLA 1 LITRO": 1.00,
-    "COLA PERSONAL": 0.75,
-    "COLA MINI ": 0.50,
-    "AGUA": 0.50,
-    "HELADO pequeño": 0.90,
-    "HELADO grande": 1.00,
-    "CERVEZA ": 1.50,
-    "CIGARRILLOS": 0.50,
-}
+from sqlalchemy import create_engine
+import psycopg2
+from streamlit_js_eval import streamlit_js_eval
+import streamlit_authenticator as stauth
+from yaml.loader import SafeLoader
+import yaml
+import plotly.express as px
 
 
+# LOGIN CONFIGURATION
+def load_config():
+  with open('config.yaml') as file:
+    return yaml.load(file, Loader=SafeLoader)
+
+def authenticate_user(credentials, cookie_config):
+  authenticator = stauth.Authenticate(
+    credentials,
+    cookie_config['name'],
+    cookie_config['key'],
+    cookie_config['expiry_days'],
+  )
+  return authenticator.login('Iniciar Sesión', 'main')
+
+
+# Sidebar
+def sidebar_info(name, authenticator):
+  st.sidebar.subheader(name)
+
+  st.sidebar.caption('Usuario')
+  st.sidebar.markdown('---')
+
+  st.sidebar.title('Sesión')
+
+  # CURRENTLY IF NOT WORKIING
+  if authenticator.logout('Cerrar Sesión', 'sidebar'):
+    print('cerrar sesion')
+
+  st.sidebar.markdown('---')
+
+  with st.sidebar.expander("Versión: 1.0"):
+    st.write('23/12/2023 - Versión Inicial.')
+    
+  st.sidebar.caption('Copyright © 2023. Todos los derechos reservados.')
+
+
+# FUNCIONES
 def format_precio(precio):
   precio_str = str(precio)
-
   if len(precio_str.split('.')[1]) == 2:
     precio_str = '$ '+str(precio)
   elif len(precio_str.split('.')[1]) == 1:
     precio_str = '$ '+str(precio) + '0'
-
   return precio_str
 
-
-
-# Crear una tabla para mostrar los productos y sus precios
-df_productos = pd.DataFrame.from_dict(productos, orient='index', columns=['Precio'])
-
-# Crear una sección para agregar productos al carrito
-st.title('MR. ALITAS')
-
-st.divider()
-st.subheader('Menú')
-
-col1, col2, col3 = st.columns([2,1,1])
-
-with col1:
-  producto = st.selectbox('Selecciona un producto', list(productos.keys()))
-
-with col2:
-  cantidad = st.number_input('Cantidad', min_value=1, max_value=200, value=1)
-
-with col3:
-  title = st.text_input('Precio', format_precio(productos[producto]), disabled=True)
-
-
-
-if st.button('Agregar al carrito'):
-  st.write(f'Agregaste {cantidad} {producto} al carrito.')
-
-    # Initialization
-  if 'list_carrito' not in st.session_state:
-    list_carrito = [{
-      "Producto":producto,
-      "Cantidad":cantidad,
-      "Precio Unitario":productos[producto],
-      "Total":cantidad*productos[producto]
-      }]
-    st.session_state['list_carrito'] = list_carrito
-
+def find_precio(item, units, format, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST):
+  product_index = PRODUCTOS_NOMBRE_LIST.index(item)
+  product_precio = PRODUCTOS_PRECIO_LIST[product_index]*units
+  if format:
+    return format_precio(product_precio)
   else:
-    list_carrito = st.session_state['list_carrito']
-    list_carrito.append({
-      "Producto":producto,
-      "Cantidad":cantidad,
-      "Precio Unitario":productos[producto],
-      "Total":cantidad*productos[producto]
-      })
+    return product_precio
+
+def pg_connect():
+  connection = psycopg2.connect(
+    host='localhost',
+    database='mr_alitas',
+    user='postgres',
+    password='000111'
+  )
+  return connection
+
+# Función para cargar datos
+def cargar_datos(id_usuario, engine):
+  query = f"""
+  SELECT v.fecha_creacion, pv.total, pv.cantidad, p.nombre
+  FROM ventas v
+  JOIN productos_ventas pv ON v.id_venta = pv.id_venta_fk
+  JOIN productos p ON p.id_producto = pv.id_producto_fk
+  WHERE v.id_usuario_fk = {id_usuario}
+  """
+  return pd.read_sql(query, engine)
+
+
+# MAIN FUNCTION
+def main(): 
+
+  # PAGE CONFIGURATION
+  st.set_page_config(
+    page_title="Mr. Alitas",
+  )
+
+  # Load configuration
+  config = load_config()
+
+  # Authenticate user
+  authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    #config['preauthorized']
+  )
+  name, authentication_status, username = authenticator.login('Iniciar Sesión', 'main')
+
+  if authentication_status:
+
+    # SIDEBAR INFO
+    sidebar_info(name, authenticator)
+
+
+    # DATABASE CONNECTION
+    print('checking connection')
+    if 'is_db_connected' in st.session_state:
+      print('db connection exists')
+      alchemyEngine = st.session_state['alchemyEngine']
+    else:
+      print('connecting to db...')
+      alchemyEngine = create_engine('postgresql+psycopg2://postgres:000111@localhost:5432/mr_alitas', pool_recycle=3600);
+      st.session_state['is_db_connected'] = True
+      st.session_state['alchemyEngine'] = alchemyEngine
+      print('connected to db')
+
+
+    # LEER LOS PRODUCTOS
+    if 'productos' in st.session_state:
+      PRODUCTOS = st.session_state['productos']
+    else:
+      with alchemyEngine.connect() as dbConnection:
+        PRODUCTOS = pd.read_sql(
+          "SELECT id_producto, nombre, precio FROM productos order by nombre asc",
+          dbConnection
+        )
+      st.session_state['productos'] = PRODUCTOS
+
+
+    # CARGANDO LOS DATOS
+    if 'values_list' in st.session_state:
+      PRODUCTOS_NOMBRE_LIST = st.session_state['PRODUCTOS_NOMBRE_LIST']
+      PRODUCTOS_PRECIO_LIST = st.session_state['PRODUCTOS_PRECIO_LIST']
+      PRODUCTOS_ID_LIST = st.session_state['PRODUCTOS_ID_LIST']
+    else:
+      PRODUCTOS_NOMBRE_LIST = PRODUCTOS['nombre'].tolist()
+      PRODUCTOS_PRECIO_LIST = PRODUCTOS['precio'].tolist()
+      PRODUCTOS_ID_LIST = PRODUCTOS['id_producto'].tolist()
+      st.session_state['PRODUCTOS_NOMBRE_LIST'] = PRODUCTOS_NOMBRE_LIST
+      st.session_state['PRODUCTOS_PRECIO_LIST'] = PRODUCTOS_PRECIO_LIST
+      st.session_state['PRODUCTOS_ID_LIST'] = PRODUCTOS_ID_LIST
+      st.session_state['values_list'] = True
+
+    # VERIFICAR EL ID
+    if 'user_id' not in st.session_state:
+      with alchemyEngine.connect() as dbConnection:
+        id_usuario_fk = pd.read_sql(
+          "SELECT id_usuario FROM usuarios where username = %s",
+          dbConnection,
+          params=(username,)
+        )
+      id_usuario_fk = id_usuario_fk['id_usuario'].tolist()[0]
+      st.session_state['user_id'] = id_usuario_fk
+    else:
+      id_usuario_fk = st.session_state['user_id']
+      #t.write(id_usuario_fk)
+
+
+    # TITLES
+    st.title('MR. ALITAS')
+
+    tab1, tab2 = st.tabs(["VENTA", "DASHBOARD"])
+
+    with tab1:
+      st.subheader('Menú')
+      # ADDING PRODUCTS
+      col1, col2 = st.columns([2,1])
+
+      with col1:
+        producto = st.selectbox('Seleccione un producto.', PRODUCTOS_NOMBRE_LIST)
+
+      with col2:
+        cantidad = st.number_input('Cantidad', min_value=1, max_value=200, value=1)
+
+      list_carrito_adding = [{
+        "Precio Unitario":find_precio(producto, 1, True, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST),
+        "Precio Total":find_precio(producto, cantidad, True, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST)
+        }]
+
+      df_carrito_adding = pd.DataFrame(
+        list_carrito_adding
+      )
+
+      st.dataframe(df_carrito_adding, use_container_width=True, hide_index=True)
+
+      # ADDING TO CART
+      if st.button('Agregar al carrito'):
+        if 'list_carrito' not in st.session_state:
+          list_carrito = [{
+            "Producto":producto,
+            "Cantidad":cantidad,
+            "Precio Unitario":find_precio(producto, 1, False, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST),
+            "Precio Total":find_precio(producto, cantidad, False, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST)
+            }]
+          st.session_state['list_carrito'] = list_carrito
+        else:
+          list_carrito = st.session_state['list_carrito']
+          list_carrito.append({
+            "Producto":producto,
+            "Cantidad":cantidad,
+            "Precio Unitario":find_precio(producto, 1, False, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST),
+            "Precio Total":find_precio(producto, cantidad, False, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIST)
+            })
+        st.toast('Producto Añadido al Carrito', icon='✅')
+          
+      # CART VIEW
+      st.divider()
+      st.subheader('Carrito de Compras')
+
+      if 'list_carrito' not in st.session_state:
+        st.write('No hay productos en el carrito.')
+      else:   
+        list_carrito = st.session_state['list_carrito']
+
+        df_list_carrito = pd.DataFrame(
+          list_carrito
+        )
+
+        df_list_carrito_formatted = df_list_carrito.copy()
+        df_list_carrito_formatted['Precio Unitario'] = df_list_carrito_formatted['Precio Unitario'].apply(format_precio)
+        df_list_carrito_formatted['Precio Total'] = df_list_carrito_formatted['Precio Total'].apply(format_precio)
+        df_list_carrito_formatted['Seleccionar'] = st.checkbox("Seleccionar", value=False)
+
+        # st.dataframe(df_list_carrito_formatted, use_container_width=True, hide_index=True)
+        edited_df = st.data_editor(df_list_carrito_formatted, use_container_width=True, hide_index=True)
+
+        TOTAL_DEL_PEDIDO = df_list_carrito['Precio Total'].sum()
+
+        df_list_total = pd.DataFrame(
+          [
+            {
+              "Cantidad de Productos": df_list_carrito['Cantidad'].sum(),
+              "Precio Total del Pedido": TOTAL_DEL_PEDIDO
+            },
+          ]
+        )
+        df_list_total_formatted = df_list_total.copy()
+        df_list_total_formatted['Precio Total del Pedido'] = df_list_total_formatted['Precio Total del Pedido'].apply(format_precio)
+
+        # ADDING PRODUCTS
+        col1_cart, col2_cart = st.columns([2,1])
+        with col1_cart:
+          st.dataframe(df_list_total_formatted, use_container_width=True, hide_index=True)
+
+        with col2_cart:
+          PAGA_CON = st.number_input("Paga con:", value=None, placeholder="$")
+
+        col1_buttons, col2_buttons, col3_buttons= st.columns(3)
+
+        with col2_buttons:
+          if edited_df['Seleccionar'].any():
+            NUM_SELECTED_ITEMS = len(edited_df[edited_df['Seleccionar']== True])
+            if st.button('Eliminar Seleccionados ('+str(NUM_SELECTED_ITEMS)+')', use_container_width=True):
+              indices_seleccionados = edited_df.index[edited_df['Seleccionar'] == True].tolist()
+              # Eliminar las filas seleccionadas
+              df = df_list_carrito.drop(indices_seleccionados)
+              if df.empty:
+                del st.session_state['list_carrito']
+              else:
+                st.session_state['list_carrito'] = df_list_carrito.drop(indices_seleccionados).to_dict('records')
+                st.toast('Productos Eliminados', icon='✅')
+
+              if 'resumen' in st.session_state:
+                del st.session_state['resumen']
+              st.rerun()
+            
+        with col1_buttons:
+          BOTON_PAGAR = st.button('Pagar', use_container_width=True)
+
+        if BOTON_PAGAR:
+          if (PAGA_CON):
+            if (TOTAL_DEL_PEDIDO>PAGA_CON):
+              st.error('Error: El valor ingresado es menor al valor del pedido.')
+              if 'resumen' in st.session_state:
+                del st.session_state['resumen']
+            else:
+              st.toast('Pago Verificado', icon='✅')
+              st.session_state['resumen'] = True
+              st.session_state['df'] = df_list_total
+              st.session_state['PAGA_CON'] = PAGA_CON
+          else: 
+            st.error('Error: Debe ingresar el valor con el que paga.')
+            if 'resumen' in st.session_state:
+              #st.write('borrando resumen')
+              del st.session_state['resumen']
+
+
+      # RESUMEN VIEW
+      if 'resumen' in st.session_state:
+        # PAGAR VIEW
+        st.divider()
+        st.subheader('Resumen')
+
+        df = st.session_state['df']
+        PAGA_CON = st.session_state['PAGA_CON']
+        df["Cambio"] = PAGA_CON - df["Precio Total del Pedido"]
+
+        df_formatted = df.copy()
+        df_formatted['Precio Total del Pedido'] = df_formatted['Precio Total del Pedido'].apply(format_precio)
+        df_formatted['Cambio'] = df_formatted['Cambio'].apply(format_precio)
+
+        st.dataframe(df_formatted, use_container_width=True, hide_index=True)
+
+        if st.button('GUARDAR PEDIDO', type='primary'):
+
+          with st.spinner(text="Guardando...", cache=False):
+
+            try:
+
+              df['valor_pagado'] = PAGA_CON
+
+              df.rename(columns = {
+                'Cantidad de Productos':'num_productos',
+                'Precio Total del Pedido':'total',
+                'Cambio':'cambio',
+              }, inplace = True)
+              #st.dataframe(df)
+              df_dict = df.to_dict('records')[0]
+              #st.write(df_dict)
+
+              df_merge_productos = pd.merge(
+                df_list_carrito, 
+                PRODUCTOS, 
+                how="left",
+                left_on='Producto', 
+                right_on='nombre'
+              )
+              df_merge_productos_drop = df_merge_productos[['id_producto', 'Cantidad', 'Precio Total']]
+              df_merge_productos_drop.rename(columns = {
+                'Cantidad':'cantidad',
+                'Precio Total':'total',
+                'id_producto':'id_producto_fk',
+              }, inplace = True)
+
+              insert_venta = """
+                INSERT INTO ventas (num_productos, total, valor_pagado, cambio, id_usuario_fk) 
+                VALUES ("""+str(df_dict['num_productos'])+""", """+str(df_dict['total'])+""", """+str(df_dict['valor_pagado'])+""", """+str(df_dict['cambio'])+""", """+str(id_usuario_fk)+""") RETURNING id_venta;
+              """
+
+              conn = pg_connect()
+              cursor = conn.cursor()
+              cursor.execute(insert_venta)
+              inserted_id_venta = cursor.fetchone()[0]
+              conn.commit()
+              conn.close()
+
+              df_merge_productos_drop['id_venta_fk'] = inserted_id_venta
+              #st.dataframe(df_merge_productos_drop)
+
+              df_merge_productos_drop.to_sql('productos_ventas', alchemyEngine, if_exists='append', index=False)
+
+              st.session_state['finished'] = True
+
+            except Exception as e:
+              print(f"An error occurred: {e}")
+              st.session_state['finished'] = False
+
+
+
+      # FINISHED VIEW
+      if 'finished' in st.session_state:
+
+        if 'resumen' in st.session_state:
+          del st.session_state['resumen']
+          st.rerun()
+
+        if 'list_carrito' in st.session_state:
+          del st.session_state['list_carrito']
+          st.rerun()
+
+        st.divider()
+        st.subheader('Pedido Finalizado')
+        FINISHED = st.session_state['finished']
+        if FINISHED:
+          st.success('Pedido Guardado Correctamente')
+        else: 
+          st.error('Error al guardar el pedido')
+
+        if st.button("NUEVO PEDIDO", type='primary'):
+          streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
+      with tab2:
     
-  #st.write(list_carrito)
+        # Sidebar para filtros
+        st.sidebar.header("Filtros")
 
+        # Cargar datos
+        datos = cargar_datos(1, alchemyEngine)
 
-st.divider()
-st.subheader('Carrito de Compras')
+        st.write(datos)
+        st.write(datos['fecha_creacion'].dt.date)
+        st.write(datos.groupby(datos['fecha_creacion'].dt.date)['total'].sum())
 
+        # Dashboard
+        st.title("Dashboard de Ventas")
 
-if 'list_carrito' not in st.session_state:
-  st.write('No hay productos en el carrito.')
-
-else: 
-
-  list_carrito = st.session_state['list_carrito']
-
-  df = pd.DataFrame(
-    list_carrito
-  )
-
-  columns = df.columns
-  column_config = {column: st.column_config.Column(disabled=True) for column in columns}
-
-  df["Borrar Producto"] = False
-  edited_df = st.data_editor(df, use_container_width = True, hide_index = True, column_config=column_config)
-  #st.write(edited_df)
-
-  df = pd.DataFrame(
-    [
-      {"Cantidad de Productos": edited_df['Cantidad'].sum(),"Total del Pedido":  edited_df['Total'].sum()},
-    ]
-  )
-
-  st.dataframe(df, use_container_width = True, hide_index = True)
-
-
-  if st.button('PAGAR'):
-    st.session_state['pago'] = True
-    st.session_state['df'] = df
-
-
-if 'pago' in st.session_state:
-  df = st.session_state['df']
-  number = st.number_input("Paga con", value=None, placeholder="Ingrese el valor.")
-  #st.write('Total: ', df['Total del Pedido'][0])
-
-  cambio = round((number-df['Total del Pedido'][0]), 2)
-
-  st.write('Cambio: ', cambio)
+        # Métricas
+        ventas_diarias = datos.groupby(datos['fecha_creacion'].dt.date)['total'].sum()
+        st.write(ventas_diarias)
+        st.header("Ventas Diarias")
+        st.bar_chart(ventas_diarias['total'])
 
 
 
 
-  if st.button('Guardar Pedido'):
-    st.write('Pedido Guardado')
+
+        # Gráfico de Ventas Semanales
+        st.header("Ventas Semanales")
+        ventas_semanales = datos.resample('W', on='fecha_creacion').sum()
+        st.line_chart(ventas_semanales['total'])
+
+        # Tabla de Datos
+        st.header("Detalle de Ventas")
+        st.dataframe(datos)
+
+
+        
+
+# MAIN STATEMENT
+if __name__ == '__main__':
+  main()

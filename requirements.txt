@@ -1,1 +1,6 @@
 streamlit
+sqlalchemy
+psycopg2-binary
+streamlit-js-eval
+streamlit-authenticator
+plotly
