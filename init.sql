@@ -56,15 +56,8 @@ CREATE TABLE usuarios (
 insert into usuarios (username, name_user) values 
   ('asinche', 'Alexandra Sinche'),
   ('sanchezd', 'Deisy Sanchez'),
-  ('tenecorat', 'Tatiana Tenecora');
-
-CREATE TABLE productos_ventas (
-	id_producto_venta SERIAL PRIMARY KEY,
-	id_venta_fk integer REFERENCES ventas(id_venta),
-	id_producto_fk integer REFERENCES productos(id_producto),
-	cantidad smallint,
-	total real
-);
+  ('tenecorat', 'Tatiana Tenecora'),
+  ('ximena', 'Ximena García');
 
 create table ventas (
 	id_venta SERIAL PRIMARY KEY,
@@ -72,7 +65,14 @@ create table ventas (
 	total real,
 	valor_pagado real,
 	cambio real,
-	id_usuario_fk integer REFERENCES usuarios(id_usuario)
-	fecha_creacion TIMESTAMP default now(),
-	
+	id_usuario_fk integer REFERENCES usuarios(id_usuario),
+	fecha_creacion TIMESTAMP default now()
+);
+
+CREATE TABLE productos_ventas (
+	id_producto_venta SERIAL PRIMARY KEY,
+	id_venta_fk integer REFERENCES ventas(id_venta),
+	id_producto_fk integer REFERENCES productos(id_producto),
+	cantidad smallint,
+	total real
 );
