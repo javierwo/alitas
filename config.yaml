@@ -16,7 +16,11 @@ credentials:
       name: Tatiana Tenecora
       password: "$2b$12$x7WezgXA7VJeoAOPa0VquuW5Rt7OqBmrQDsvFzCFE2OZnH0jksqx2"
 
+    admin:
+      name: Administrador
+      password: "$2b$12$BcKcb3wZCTkII/96ZnRQqeCBhR6eNeVnFQHtk..viadK/E3rvnEJi"
+
 cookie:
   expiry_days: 10
-  key: some_signature_key
+  key: mr_alitas*2024
   name: streamlit_auth

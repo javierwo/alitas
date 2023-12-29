@@ -2,7 +2,7 @@ CREATE TABLE productos (
 	id_producto SERIAL PRIMARY KEY,
 	nombre varchar(300),
 	precio real,
-	fecha TIMESTAMP default now()
+	fecha_ingreso TIMESTAMP default now()
 );
 
 insert into productos (nombre, precio) values
@@ -58,7 +58,7 @@ insert into usuarios (username, name_user) values
   ('sanchezd', 'Deisy Sanchez'),
   ('tenecorat', 'Tatiana Tenecora'),
   ('ximena', 'Ximena García');
-
+  
 create table ventas (
 	id_venta SERIAL PRIMARY KEY,
 	num_productos smallint,

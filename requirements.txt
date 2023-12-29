@@ -4,3 +4,9 @@ psycopg2-binary
 streamlit-js-eval
 streamlit-authenticator
 plotly
+streamlit-antd-components
+streamlit-echarts
+xlsxwriter
+pyxlsb
+openpyxl
+pygwalker
