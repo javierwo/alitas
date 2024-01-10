@@ -1,3 +1,5 @@
+SET TIME ZONE 'America/Guayaquil';
+
 CREATE TABLE productos (
 	id_producto SERIAL PRIMARY KEY,
 	nombre varchar(300),

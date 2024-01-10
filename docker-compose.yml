@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://postgres:000111@db:5432/mr_alitas
+
+  db:
+    image: postgres:latest
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=000111
+      - POSTGRES_DB=mr_alitas
+      - TZ=America/Guayaquil
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  postgres_data:
