@@ -22,7 +22,6 @@ ROLES = {
   'admin': 'admin',
 }
 
-
 # LOGIN CONFIGURATION
 def load_config():
   with open('config.yaml') as file:
@@ -90,13 +89,23 @@ def find_precio(item, units, format, PRODUCTOS_NOMBRE_LIST, PRODUCTOS_PRECIO_LIS
   else:
     return product_precio
 
+#def pg_connect():
+#  connection = psycopg2.connect(
+#    #host='db',
+#    host='localhost',
+#    database='mr_alitas',
+#    user='postgres',
+#    password='000111'
+#  )
+#  return connection
+
 def pg_connect():
   connection = psycopg2.connect(
-    #host='db',
-    host='localhost',
-    database='mr_alitas',
+    host='monorail.proxy.rlwy.net',
+    database='railway',
     user='postgres',
-    password='000111'
+    password='4EAFBd5-5da2D-6gd4EGg2f1G2B32df3',
+    port=15770
   )
   return connection
 
@@ -108,7 +117,8 @@ def connect_database():
   else:
     #print('connecting to db...')
     #alchemyEngine = create_engine('postgresql+psycopg2://postgres:000111@db:5432/mr_alitas', pool_recycle=3600);
-    alchemyEngine = create_engine('postgresql+psycopg2://postgres:000111@localhost:5432/mr_alitas', pool_recycle=3600);
+    #alchemyEngine = create_engine('postgresql+psycopg2://postgres:000111@localhost:5432/mr_alitas', pool_recycle=3600);
+    alchemyEngine = create_engine('postgresql+psycopg2://postgres:4EAFBd5-5da2D-6gd4EGg2f1G2B32df3@monorail.proxy.rlwy.net:15770/railway', pool_recycle=3600);
     st.session_state['is_db_connected'] = True
     st.session_state['alchemyEngine'] = alchemyEngine
     #print('connected to db')
@@ -251,7 +261,7 @@ def show_ventas_user(alchemyEngine, username):
       st.dataframe(df_list_total_formatted, use_container_width=True, hide_index=True)
 
     with col2_cart:
-      PAGA_CON = st.number_input("Paga con:", value=None, placeholder="$")
+      PAGA_CON = st.number_input("Paga con (en dólares):", value=None, placeholder="$")
 
     col1_buttons, col2_buttons, col3_buttons= st.columns(3)
 
@@ -587,60 +597,72 @@ def show_dashboard_admin(alchemyEngine, username):
 
       col1_date, col2_date = st.columns(2)
       with col1_date:
-        date_desde = st.date_input("Fecha de Inicio", datetime.date.today()-datetime.timedelta(days=30), max_value=datetime.date.today())
+        date_desde = st.date_input("Fecha de Inicio", datetime.date.today()-datetime.timedelta(days=30), max_value=datetime.date.today(), format="DD-MM-YYYY")
       with col2_date:
-        date_hasta = st.date_input("Fecha de Fin", datetime.date.today(), max_value=datetime.date.today())
+        date_hasta = st.date_input("Fecha de Fin", datetime.date.today(), max_value=datetime.date.today(), format="DD-MM-YYYY")
 
-      # Every form must have a submit button.
-      submitted = st.form_submit_button("Cargar Datos")
-      if submitted:
-        if len(options_usuarios)==0:
-          ALL_USERS_IDS = ALL_USERS_LIST
-        else:
-          ALL_USERS_IDS = ALL_USERS[ALL_USERS['name_user'].isin(options_usuarios)]['id_usuario'].unique().tolist()
-        ALL_PRODUCTS_IDS = ALL_PRODUCTS[ALL_PRODUCTS['nombre'].isin(options_productos)]['id_producto'].unique().tolist()
+      st.divider()
 
-        date_desde_str = "'"+str(date_desde)+"'"
-        date_hasta_str = "'"+str(date_hasta)+"'"
+      col1_sub, col2_sub = st.columns(2)
+      with col1_sub:
+        submitted = st.form_submit_button("Cargar Datos", use_container_width=True)
 
+      with col2_sub:
+        if submitted:
 
-        if len(ALL_USERS_IDS)==0 or len(ALL_USERS_LIST)==len(ALL_USERS_IDS):
-          SQL_VENTAS = "select * from ventas v left join usuarios u on u.id_usuario = v.id_usuario_fk where DATE(v.fecha_creacion) between "+date_desde_str+" and "+date_hasta_str+";"
-        else:
-          SQL_VENTAS = "select * from ventas v left join usuarios u on u.id_usuario = v.id_usuario_fk where DATE(v.fecha_creacion) between "+date_desde_str+" and "+date_hasta_str+" and v.id_usuario_fk in ("+str(ALL_USERS_IDS)[1:-1]+")"
-        
-        with alchemyEngine.connect() as dbConnection:
-          VENTAS_GENERAL = pd.read_sql(
-            SQL_VENTAS,
-            dbConnection,
-          )
+          with st.spinner('Cargando los datos...'):
 
-          if len(VENTAS_GENERAL)==0:
-            st.error('No se han registrado ventas con esos parámetros.')
-            st.stop()
+            if len(options_usuarios)==0:
+              ALL_USERS_IDS = ALL_USERS_LIST
+            else:
+              ALL_USERS_IDS = ALL_USERS[ALL_USERS['name_user'].isin(options_usuarios)]['id_usuario'].unique().tolist()
 
-          else:
-            id_venta_list = VENTAS_GENERAL['id_venta'].tolist()
+            if len(options_productos)==0:
+              ALL_PRODUCTS_IDS = ALL_PRODUCTS['id_producto'].unique().tolist()
+            else:
+              ALL_PRODUCTS_IDS = ALL_PRODUCTS[ALL_PRODUCTS['nombre'].isin(options_productos)]['id_producto'].unique().tolist()
+
+            date_desde_str = "'"+str(date_desde)+"'"
+            date_hasta_str = "'"+str(date_hasta)+"'"
+
+            if len(ALL_USERS_IDS)==0 or len(ALL_USERS_LIST)==len(ALL_USERS_IDS):
+              SQL_VENTAS = "select * from ventas v left join usuarios u on u.id_usuario = v.id_usuario_fk where DATE(v.fecha_creacion) between "+date_desde_str+" and "+date_hasta_str+";"
+            else:
+              SQL_VENTAS = "select * from ventas v left join usuarios u on u.id_usuario = v.id_usuario_fk where DATE(v.fecha_creacion) between "+date_desde_str+" and "+date_hasta_str+" and v.id_usuario_fk in ("+str(ALL_USERS_IDS)[1:-1]+")"
+            
             with alchemyEngine.connect() as dbConnection:
-              VENTAS_PRODUCTOS = pd.read_sql(
-                "select pv.id_venta_fk, pv.id_producto_fk, pv.cantidad, pv.total, p.nombre, p.precio, u.name_user, v.fecha_creacion from productos_ventas pv left join productos p on p.id_producto = pv.id_producto_fk left join ventas v on pv.id_venta_fk  = v.id_venta left join usuarios u on v.id_usuario_fk = u.id_usuario where id_venta_fk in ("+str(id_venta_list)[1:-1]+")",
+              VENTAS_GENERAL = pd.read_sql(
+                SQL_VENTAS,
                 dbConnection,
               )
 
-            if len(ALL_PRODUCTS_IDS)>0:
-              VENTAS_PRODUCTOS = VENTAS_PRODUCTOS[VENTAS_PRODUCTOS['id_producto_fk'].isin(ALL_PRODUCTS_IDS)]
-            
-            del VENTAS_PRODUCTOS['id_venta_fk']
-            del VENTAS_PRODUCTOS['id_producto_fk']
-            st.session_state['VENTAS'] = True
-            st.session_state['VENTAS_PRODUCTOS'] = VENTAS_PRODUCTOS
+              if len(VENTAS_GENERAL)==0:
+                # ESTOS PARÁMETROS SE AÑADEN SOLO PARA MOSTRAR EL MENSAJE DE QUE NO EXISTEN VENTAS
+                # DEBIDO A LA CONDICIÓN DE if len(VENTAS_PRODUCTOS)==0: 
+                st.session_state['VENTAS'] = True
+                st.session_state['VENTAS_PRODUCTOS'] = []
+
+              else:
+                id_venta_list = VENTAS_GENERAL['id_venta'].tolist()
+                with alchemyEngine.connect() as dbConnection:
+                  VENTAS_PRODUCTOS = pd.read_sql(
+                    "select pv.id_venta_fk, pv.id_producto_fk, pv.cantidad, pv.total, p.nombre, p.precio, u.name_user, v.fecha_creacion from productos_ventas pv left join productos p on p.id_producto = pv.id_producto_fk left join ventas v on pv.id_venta_fk  = v.id_venta left join usuarios u on v.id_usuario_fk = u.id_usuario where id_venta_fk in ("+str(id_venta_list)[1:-1]+")",
+                    dbConnection,
+                  )
+
+                VENTAS_PRODUCTOS = VENTAS_PRODUCTOS[VENTAS_PRODUCTOS['id_producto_fk'].isin(ALL_PRODUCTS_IDS)]
+                del VENTAS_PRODUCTOS['id_venta_fk']
+                del VENTAS_PRODUCTOS['id_producto_fk']
+                st.session_state['VENTAS'] = True
+                st.session_state['VENTAS_PRODUCTOS'] = VENTAS_PRODUCTOS
 
   if 'VENTAS' not in st.session_state:
-    st.info('Busque datos aplicando los filtros.')
+    st.info('Busque datos aplicando los filtros.', icon="ℹ️")
   else:
+    VENTAS_PRODUCTOS = st.session_state['VENTAS_PRODUCTOS']
 
     if len(VENTAS_PRODUCTOS)==0: 
-      st.error('No se han registrado ventas con esos parámetros.')
+      st.info('No se han registrado ventas con esos parámetros.', icon="ℹ️")
       st.stop()
 
     VENTAS_PRODUCTOS = st.session_state['VENTAS_PRODUCTOS']
@@ -692,6 +714,9 @@ def show_dashboard_admin(alchemyEngine, username):
     ], align='start', variant='default', use_container_width=False, size='sm')
 
     if tab == 'Detalle de Ventas':
+
+
+
       st.dataframe(VENTAS_PRODUCTOS, use_container_width=True)
 
       NOMBRE_ARCHIVO = 'REPORTE DE VENTAS' + '_ DEL ' + str(date_desde) + ' AL ' + str(date_hasta) + '.xlsx'

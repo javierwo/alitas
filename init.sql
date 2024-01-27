@@ -1,5 +1,7 @@
 SET TIME ZONE 'America/Guayaquil';
 
+/*ALTER DATABASE railway SET timezone TO 'America/Guayaquil';*/
+
 CREATE TABLE productos (
 	id_producto SERIAL PRIMARY KEY,
 	nombre varchar(300),
